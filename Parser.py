@@ -38,8 +38,6 @@ class Tokenizer:
 		except StopIteration	:
 			return None
 
-Rule = namedtuple("Rule", ["name", "alts"])
-
 class Parser:
 	def __init__(self, fp):
 		self.__tokenizer = Tokenizer(fp)
@@ -56,10 +54,40 @@ class Parser:
 			return self.__tokenizer.get_token()
 		return None;
 
+Rule = namedtuple("Rule", ["name", "alts"])
+
 Wildcard = namedtuple("Wildcard", ["op", "alts"])
+Charset = namedtuple("Charset", ["op", "chars"])
 
 class GrammarParser(Parser):
 	
+	def parseCharset(self):
+		pos = self.get()
+		
+		if not self.expect("["):
+			self.set(pos)
+			return None
+		
+		chars = self.expect(STRING)
+		if not chars:
+			self.set(pos)
+			return None
+		
+		if not self.expect("]"):
+			self.set(pos)
+			return None
+		
+		if self.expect("+"):
+			return Charset("+", chars.str)
+		
+		if self.expect("*"):
+			return Charset("*", chars.str)
+		
+		if self.expect("?"):
+			return Charset("?", chars.str)
+			
+		return Charset("", chars.str)
+			
 	def parseWildcard(self):
 		pos = self.get()
 		
@@ -107,6 +135,7 @@ class GrammarParser(Parser):
 	def parseAlternative(self):
 		token = (	self.expect(NAME) or 
 					self.expect(STRING)	or
+					self.parseCharset() or
 					self.parseWildcard()	)
 					
 		if not token:
@@ -116,6 +145,7 @@ class GrammarParser(Parser):
 		while True:
 			token = (	self.expect(NAME) or 
 						self.expect(STRING)	or
+						self.parseCharset() or
 						self.parseWildcard()	)
 			
 			if not token:
@@ -160,12 +190,14 @@ class PEGGenerator:
 	def __init__(self, grammar, fp):
 		self.__grammar = grammar
 		self.__fp = fp
+		self.depth = 0
 	
 	class_header = '''
 	#include <cstring>
 	#include <string>
 	#include <iostream>
 	#include <stack>
+	#include <cassert>
 	
 	using namespace std;
 
@@ -182,7 +214,17 @@ class PEGGenerator:
 		
 		inline void skip()
 		{
-			while (isspace(*input)) input++;
+			while (*input && isspace(*input)) input++;
+		}
+		
+		inline int symbol(const char* c, size_t n)
+		{
+			skip();
+			if (*input && strchr(c, *input) != NULL) {
+				input++;
+				return 1;
+			}
+			return 0;
 		}	
 		
 		inline void mark()
@@ -248,8 +290,7 @@ class PEGGenerator:
 			string s;
 			getline(cin, s);
 			Parser p(s.c_str());
-			cout << p.parseE() << endl;
-			cout << p.pos() << endl;
+			cout << p.parseE() << ": |" <<p.pos() << "|" << endl;
 		}
 	'''
 	
@@ -274,65 +315,124 @@ class PEGGenerator:
 				
 			self.__fp.write(self.escape)
 				
-		if isinstance(part, Wildcard):		
-			self.alts(part.alts)
-			
+		if isinstance(part, Wildcard):
+			self.__fp.write(f'''
+				// WILDCARD {part.op} : {part.alts}
+			''')
+				
 			if part.op == "":
+				self.alts(part.alts)
 				self.__fp.write('''
 					drop();
 				''')
+				self.__fp.write(self.escape)
 				
 			elif part.op == "+":
+				self.alts(part.alts)
+				self.__fp.write('''
+					drop();
+				''')
 				self.__fp.write(self.escape)
 				self.__fp.write('''
-					push(top());
-					while (top()) {
+					do {
 				''')
 				self.alts(part.alts)
 				self.__fp.write('''
-						drop();
-					}
-					pop();
+					} while (pop());
+					top() = 1;
 				''')
 				
 			elif part.op == "?":
+				self.alts(part.alts)
 				self.__fp.write('''
 					pop();
+					top() = 1;
 				''')
 				
 			elif part.op == "*":
 				self.__fp.write('''
-					push(top());
-					while (top()) {
+					do {
 				''')
 				self.alts(part.alts)
 				self.__fp.write('''
-						drop();
-					}
-					pop();
+					} while (pop());
+					top() = 1;
 				''')
+			
+			self.__fp.write(f'''
+				// END WILDCARD {part.op} : {part.alts}
+			''')
 	
+		if isinstance(part, Charset):
+			symbol = f'''
+				top() = symbol(
+					{part.chars}, 
+					{len(part.chars) - 2}
+				);
+			'''
+			
+			skip = f'''
+				do {{
+					push(0);
+					{symbol}
+				}} while (pop());
+			'''
+			
+			self.__fp.write(symbol)
+			
+			if part.op == "":
+				self.__fp.write(self.escape)
+				
+			if part.op == "+":
+				self.__fp.write(self.escape)
+				self.__fp.write(skip)
+				
+			if part.op == "?":
+				self.__fp.write(f'''
+					top() = 1;
+				''')
+				
+			if part.op == "*":
+				self.__fp.write(skip)
+				self.__fp.write('''
+					top() = 1;
+				''')
+				
+			
 	def alt(self, alt):
 		for part in alt:
 			self.part(part)
 	
 	def alts(self, alts):
-		self.__fp.write('''
+		self.depth += 1
+		
+		self.__fp.write(f'''
+			// ALTS {alts}
 			push(0);
 		''')
 		
 		for alt in alts:
-			self.__fp.write('''
-				while (!top()) {
+			self.__fp.write(f'''
+				// ALT {alt}
+				while (!top()) {{
 					mark();
 			''')
 			
 			self.alt(alt)
 			
-			self.__fp.write('''
+			self.__fp.write(f'''
 					unmark();
-				}
+				}}
+				// END ALT {alt} 
 			''')
+		
+		self.__fp.write(f'''
+			// END ALTS {alts}
+			cout << init_size << " : " << results.size() << endl;
+			assert(results.size() == init_size + {self.depth});
+		''')
+		
+		self.depth -= 1
 	
 	def generate(self):
 		self.__fp.write(self.class_header)
@@ -340,13 +440,16 @@ class PEGGenerator:
 		for rule in self.__grammar:
 			self.__fp.write(f'''
 				int parse{rule.name}() {{
+					cout << "Start parse {rule.name}" << endl;
+					const size_t init_size = results.size();
 			''')
 			
 			self.alts(rule.alts)
 			
-			self.__fp.write('''
+			self.__fp.write(f'''
+					cout << "End parse {rule.name}" << endl;
 					return pop();
-				}
+				}}
 			''')
 		
 		self.__fp.write(self.class_footer)
