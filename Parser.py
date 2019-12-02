@@ -197,7 +197,11 @@ class PEGGenerator:
 	#include <string>
 	#include <iostream>
 	#include <stack>
+	#include <optional>
 	#include <cassert>
+	#include <cstdlib>
+	
+	#include "Node.hpp"
 	
 	using namespace std;
 
@@ -206,7 +210,7 @@ class PEGGenerator:
 	private:
 		const char* input;
 		stack<const char*> marks;
-		stack<int> results;
+		stack<optional<Node*> > results;
 	public:
 		Parser(const char* input) : input(input)
 		{
@@ -217,14 +221,15 @@ class PEGGenerator:
 			while (*input && isspace(*input)) input++;
 		}
 		
-		inline int symbol(const char* c, size_t n)
+		inline optional<char> symbol(const char* c, size_t n)
 		{
 			skip();
 			if (*input && strchr(c, *input) != NULL) {
+				char retval = *input;
 				input++;
-				return 1;
+				return retval;
 			}
-			return 0;
+			return nullopt;
 		}	
 		
 		inline void mark()
@@ -243,26 +248,26 @@ class PEGGenerator:
 			marks.pop();
 		}
 		
-		inline int pop()
+		inline optional<Node*> pop()
 		{
-			int retval = results.top();
+			auto retval = results.top();
 			results.pop();
 			return retval;
 		}
 		
-		inline void push(int res)
+		inline void push(optional<Node*> res)
 		{
-			results.emplace(res);
+			results.push(res);
 		}
 		
 		inline void drop()
 		{
-			int temp = results.top();
+			optional<Node*> temp = results.top();
 			results.pop();
 			results.top() = temp;
 		}
 		
-		inline int& top()
+		inline optional<Node*>& top()
 		{
 			return results.top();
 		}
@@ -272,14 +277,14 @@ class PEGGenerator:
 			return input;
 		}
 		
-		int expect(const char* s, int n)
+		optional<Node*> expect(const char* s, int n)
 		{
 			skip();
 			if (strncmp(input, s, n) == 0) {
 				input += n;
-				return 1;
+				return new Node {s};
 			}
-			return 0;
+			return nullopt;
 		}
 	'''
 	
@@ -290,12 +295,26 @@ class PEGGenerator:
 			string s;
 			getline(cin, s);
 			Parser p(s.c_str());
-			cout << p.parseE() << ": |" <<p.pos() << "|" << endl;
+			
+			auto tree = p.parseE();
+			
+			cout << "|" << p.pos() << "|" << endl;
+			if (tree) {
+				ofstream out("dump.dot");
+				dump_tree(*tree, out);
+				out.close();
+			}
+			else {
+				cout << "Nothing parsed" << endl;
+			}
 		}
 	'''
 	
 	escape = '''
-		if (!top()) {
+		if (!tmp) {
+			purge_tree(*top());
+			top() = nullopt;
+			
 			reset();
 			break;
 		}
@@ -305,15 +324,19 @@ class PEGGenerator:
 		if isinstance(part, Token):
 			if part.type == STRING:
 				self.__fp.write(f'''
-					top() = expect({part.str}, {len(part.str) - 2});
+					tmp = expect({part.str}, {len(part.str) - 2});
 				''')
 				
 			elif part.type == NAME:
 				self.__fp.write(f'''
-					top() = parse{part.str}();
+					tmp = parse{part.str}();
 				''')
 				
 			self.__fp.write(self.escape)
+			
+			self.__fp.write('''
+				(*top())->childs.push_back(*tmp);
+			''')
 				
 		if isinstance(part, Wildcard):
 			self.__fp.write(f'''
@@ -323,83 +346,173 @@ class PEGGenerator:
 			if part.op == "":
 				self.alts(part.alts)
 				self.__fp.write('''
-					drop();
+					tmp = pop();
 				''')
 				self.__fp.write(self.escape)
+				self.__fp.write('''
+					(*top())->childs.insert((*top())->childs.end(),
+					(*tmp)->childs.begin(), (*tmp)->childs.end());
+					delete *tmp;
+				''');
 				
 			elif part.op == "+":
 				self.alts(part.alts)
 				self.__fp.write('''
-					drop();
+					tmp = pop();
 				''')
 				self.__fp.write(self.escape)
 				self.__fp.write('''
-					do {
+					(*top())->childs.insert((*top())->childs.end(),
+					(*tmp)->childs.begin(), (*tmp)->childs.end());
+					delete *tmp;
+					
+					while (1) {
 				''')
 				self.alts(part.alts)
 				self.__fp.write('''
-					} while (pop());
-					top() = 1;
+						tmp = pop();
+						
+						if (tmp) {
+							(*top())->childs.insert((*top())->childs.end(),
+							(*tmp)->childs.begin(), (*tmp)->childs.end());
+							delete *tmp;
+							
+							continue;
+						}
+						
+						break;
+					}
 				''')
 				
 			elif part.op == "?":
 				self.alts(part.alts)
 				self.__fp.write('''
-					pop();
-					top() = 1;
+					tmp = pop();
+					
+					if (tmp) {
+						(*top())->childs.insert((*top())->childs.end(),
+						(*tmp)->childs.begin(), (*tmp)->childs.end());
+						delete *tmp;
+					} 
 				''')
 				
 			elif part.op == "*":
 				self.__fp.write('''
-					do {
+					while (1) {
 				''')
 				self.alts(part.alts)
 				self.__fp.write('''
-					} while (pop());
-					top() = 1;
+						tmp = pop();
+						
+						if (tmp) {
+							(*top())->childs.insert((*top())->childs.end(),
+							(*tmp)->childs.begin(), (*tmp)->childs.end());
+							delete *tmp;
+							
+							continue;
+						} 
+						
+						break;
+					}
 				''')
 			
 			self.__fp.write(f'''
 				// END WILDCARD {part.op} : {part.alts}
 			''')
 	
-		if isinstance(part, Charset):
-			symbol = f'''
-				top() = symbol(
+		if isinstance(part, Charset):			
+			self.__fp.write(f'''
+				ctmp = symbol(
 					{part.chars}, 
 					{len(part.chars) - 2}
 				);
-			'''
-			
-			skip = f'''
-				do {{
-					push(0);
-					{symbol}
-				}} while (pop());
-			'''
-			
-			self.__fp.write(symbol)
+			''')
 			
 			if part.op == "":
-				self.__fp.write(self.escape)
+				self.__fp.write('''
+					if (!ctmp) {
+						purge_tree(*top());
+						top() = nullopt;
+						
+						reset();
+						break;
+					}
+					
+					(*top())->childs.push_back(
+						new Node {string(1, *ctmp)}
+					);
+				''')
 				
 			if part.op == "+":
-				self.__fp.write(self.escape)
-				self.__fp.write(skip)
+				self.__fp.write('''
+					if (!ctmp) {
+						purge_tree(*top());
+						top() = nullopt;
+						
+						reset();
+						break;
+					}
+					
+					(*top())->childs.push_back(
+						new Node {string(1, *ctmp)}
+					);
+				''')
+				
+				self.__fp.write(f'''
+					while (ctmp) {{
+						ctmp = symbol(
+							{part.chars}, 
+							{len(part.chars) - 2}
+						);
+						
+						if (ctmp) {{
+							(*top())->childs.back()->data += *ctmp;
+							
+							continue;
+						}}
+						
+						break;
+					}}
+				''')
 				
 			if part.op == "?":
-				self.__fp.write(f'''
-					top() = 1;
+				self.__fp.write('''
+					if (ctmp) {
+						(*top())->childs.push_back(
+							new Node {string(1, *ctmp)}
+						);
+					}
 				''')
 				
 			if part.op == "*":
-				self.__fp.write(skip)
-				self.__fp.write('''
-					top() = 1;
-				''')
+				self.__fp.write(f'''
+					if (ctmp) {{
+						(*top())->childs.push_back(
+							new Node {{string(1, *ctmp)}}
+						);
+					}}
 				
-			
+					while (ctmp) {{
+						ctmp = symbol(
+							{part.chars}, 
+							{len(part.chars) - 2}
+						);
+						
+						if (ctmp) {{
+							(*top())->childs.back()->data += *ctmp;
+							
+							continue;
+						}}
+						
+						break;
+					}}
+				''')
+							
 	def alt(self, alt):
+		self.__fp.write(f'''
+			top() = new Node;
+		''')
+		
 		for part in alt:
 			self.part(part)
 	
@@ -408,7 +521,7 @@ class PEGGenerator:
 		
 		self.__fp.write(f'''
 			// ALTS {alts}
-			push(0);
+			push(nullopt);
 		''')
 		
 		for alt in alts:
@@ -439,9 +552,12 @@ class PEGGenerator:
 		
 		for rule in self.__grammar:
 			self.__fp.write(f'''
-				int parse{rule.name}() {{
+				optional<Node*> parse{rule.name}() {{
 					cout << "Start parse {rule.name}" << endl;
 					const size_t init_size = results.size();
+					
+					optional<Node*> tmp = nullopt;
+					optional<char> ctmp = nullopt;
 			''')
 			
 			self.alts(rule.alts)
