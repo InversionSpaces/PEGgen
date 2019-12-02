@@ -320,6 +320,32 @@ class PEGGenerator:
 		}
 	'''
 	
+	cescape = '''
+		if (!ctmp) {
+			purge_tree(*top());
+			top() = nullopt;
+			
+			reset();
+			break;
+		}
+	'''
+	
+	mkstr = '''
+		(*top())->childs.push_back(
+			new Node {string(1, *ctmp)}
+		);
+	'''
+	
+	addchr = '''
+		(*top())->childs.back()->data += *ctmp;
+	'''
+	
+	insert = '''
+		(*top())->childs.insert((*top())->childs.end(),
+		(*tmp)->childs.begin(), (*tmp)->childs.end());
+		delete *tmp;
+	'''
+	
 	def part(self, part):
 		if isinstance(part, Token):
 			if part.type == STRING:
@@ -349,11 +375,7 @@ class PEGGenerator:
 					tmp = pop();
 				''')
 				self.__fp.write(self.escape)
-				self.__fp.write('''
-					(*top())->childs.insert((*top())->childs.end(),
-					(*tmp)->childs.begin(), (*tmp)->childs.end());
-					delete *tmp;
-				''');
+				self.__fp.write(self.insert);
 				
 			elif part.op == "+":
 				self.alts(part.alts)
@@ -361,58 +383,46 @@ class PEGGenerator:
 					tmp = pop();
 				''')
 				self.__fp.write(self.escape)
-				self.__fp.write('''
-					(*top())->childs.insert((*top())->childs.end(),
-					(*tmp)->childs.begin(), (*tmp)->childs.end());
-					delete *tmp;
-					
+				self.__fp.write(self.insert)
+				self.__fp.write('''					
 					while (1) {
 				''')
 				self.alts(part.alts)
 				self.__fp.write('''
-						tmp = pop();
-						
+						tmp = pop();					
 						if (tmp) {
-							(*top())->childs.insert((*top())->childs.end(),
-							(*tmp)->childs.begin(), (*tmp)->childs.end());
-							delete *tmp;
-							
-							continue;
+				''')
+				self.__fp.write(self.insert)
+				self.__fp.write('''
 						}
-						
-						break;
+						else break;
 					}
 				''')
 				
 			elif part.op == "?":
 				self.alts(part.alts)
 				self.__fp.write('''
-					tmp = pop();
-					
+					tmp = pop();					
 					if (tmp) {
-						(*top())->childs.insert((*top())->childs.end(),
-						(*tmp)->childs.begin(), (*tmp)->childs.end());
-						delete *tmp;
-					} 
+				''')
+				self.__fp.write(self.insert)
+				self.__fp.write('''
+					}
 				''')
 				
 			elif part.op == "*":
-				self.__fp.write('''
+				self.__fp.write('''					
 					while (1) {
 				''')
 				self.alts(part.alts)
 				self.__fp.write('''
-						tmp = pop();
-						
+						tmp = pop();					
 						if (tmp) {
-							(*top())->childs.insert((*top())->childs.end(),
-							(*tmp)->childs.begin(), (*tmp)->childs.end());
-							delete *tmp;
-							
-							continue;
-						} 
-						
-						break;
+				''')
+				self.__fp.write(self.insert)
+				self.__fp.write('''
+						}
+						else break;
 					}
 				''')
 			
@@ -420,97 +430,60 @@ class PEGGenerator:
 				// END WILDCARD {part.op} : {part.alts}
 			''')
 	
-		if isinstance(part, Charset):			
-			self.__fp.write(f'''
+		if isinstance(part, Charset):
+			symbol = f'''
 				ctmp = symbol(
 					{part.chars}, 
 					{len(part.chars) - 2}
 				);
-			''')
+			'''
+						
+			self.__fp.write(symbol)
 			
 			if part.op == "":
-				self.__fp.write('''
-					if (!ctmp) {
-						purge_tree(*top());
-						top() = nullopt;
-						
-						reset();
-						break;
-					}
-					
-					(*top())->childs.push_back(
-						new Node {string(1, *ctmp)}
-					);
-				''')
+				self.__fp.write(self.cescape)
+				self.__fp.write(self.mkstr)
 				
-			if part.op == "+":
-				self.__fp.write('''
-					if (!ctmp) {
-						purge_tree(*top());
-						top() = nullopt;
-						
-						reset();
-						break;
-					}
-					
-					(*top())->childs.push_back(
-						new Node {string(1, *ctmp)}
-					);
-				''')
-				
+			elif part.op == "+":
+				self.__fp.write(self.cescape)
+				self.__fp.write(self.mkstr)
 				self.__fp.write(f'''
 					while (ctmp) {{
-						ctmp = symbol(
-							{part.chars}, 
-							{len(part.chars) - 2}
-						);
+						{symbol}
 						
 						if (ctmp) {{
-							(*top())->childs.back()->data += *ctmp;
-							
-							continue;
+							{self.addchr}
 						}}
-						
-						break;
+						else break;
 					}}
 				''')
 				
-			if part.op == "?":
-				self.__fp.write('''
-					if (ctmp) {
-						(*top())->childs.push_back(
-							new Node {string(1, *ctmp)}
-						);
-					}
-				''')
-				
-			if part.op == "*":
+			elif part.op == "?":
 				self.__fp.write(f'''
 					if (ctmp) {{
-						(*top())->childs.push_back(
-							new Node {{string(1, *ctmp)}}
-						);
+						{self.mkstr}
+					}}
+				''')
+				
+			elif part.op == "*":
+				self.__fp.write(f'''
+					if (ctmp) {{
+						{self.mkstr}
 					}}
 				
 					while (ctmp) {{
-						ctmp = symbol(
-							{part.chars}, 
-							{len(part.chars) - 2}
-						);
+						{symbol}
 						
 						if (ctmp) {{
-							(*top())->childs.back()->data += *ctmp;
-							
-							continue;
+							{self.addchr}
 						}}
-						
-						break;
+						else break;
 					}}
 				''')
 							
 	def alt(self, alt):
 		self.__fp.write(f'''
-			top() = new Node;
+			top() = new Node{{ "Meta" }};
 		''')
 		
 		for part in alt:
