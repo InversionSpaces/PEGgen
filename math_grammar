@@ -1,0 +1,5 @@
+E -> T (["+-"] T)*
+T -> A (["*/"] A)*
+A -> N | I | "(" E ")"
+I -> ["qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"]+
+N -> ["+-"]? ["1234567890"]+ ("." ["1234567890"]*)?

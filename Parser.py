@@ -288,28 +288,6 @@ class PEGGenerator:
 		}
 	'''
 	
-	class_footer = '''
-		};
-		
-		int main() {
-			string s;
-			getline(cin, s);
-			Parser p(s.c_str());
-			
-			auto tree = p.parseE();
-			
-			cout << "|" << p.pos() << "|" << endl;
-			if (tree) {
-				ofstream out("dump.dot");
-				dump_tree(*tree, out);
-				out.close();
-			}
-			else {
-				cout << "Nothing parsed" << endl;
-			}
-		}
-	'''
-	
 	escape = '''
 		if (!tmp) {
 			purge_tree(*top());
@@ -483,7 +461,7 @@ class PEGGenerator:
 							
 	def alt(self, alt):
 		self.__fp.write(f'''
-			top() = new Node{{ "Meta" }};
+			top() = new Node{{}};
 		''')
 		
 		for part in alt:
@@ -514,7 +492,6 @@ class PEGGenerator:
 		
 		self.__fp.write(f'''
 			// END ALTS {alts}
-			cout << init_size << " : " << results.size() << endl;
 			assert(results.size() == init_size + {self.depth});
 		''')
 		
@@ -526,7 +503,6 @@ class PEGGenerator:
 		for rule in self.__grammar:
 			self.__fp.write(f'''
 				optional<Node*> parse{rule.name}() {{
-					cout << "Start parse {rule.name}" << endl;
 					const size_t init_size = results.size();
 					
 					optional<Node*> tmp = nullopt;
@@ -536,12 +512,16 @@ class PEGGenerator:
 			self.alts(rule.alts)
 			
 			self.__fp.write(f'''
-					cout << "End parse {rule.name}" << endl;
-					return pop();
+					tmp = pop();
+					if (tmp) {{
+						(*tmp)->data = "{rule.name}";
+					}}
+					
+					return tmp;
 				}}
 			''')
 		
-		self.__fp.write(self.class_footer)
+		self.__fp.write("};")
 
 fin = open("test", "rb")
 
@@ -552,8 +532,6 @@ fout = open("test.cpp", "w")
 grammar = parser.parseGrammar()
 
 fin.close()
-
-print(grammar)
 
 generator = PEGGenerator(grammar, fout)
 

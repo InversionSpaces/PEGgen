@@ -1,0 +1,15 @@
+PROGRAM -> (FUNCTION)*
+FUNCTION -> "def" ID "(" (IDLIST)? ")" (":" IDLIST)? BLOCK
+BLOCK -> "{" (CALL | STATEMENT | IFSTATEMENT | RETSTATEMENT)* "}"
+IDLIST -> ID ("," ID)*
+EXPR -> T (["+-"] T)*
+T -> A (["*/"] A)*
+A -> NUM | ["+-"]? ID | "(" EXPR ")"
+NUM -> ["+-"]? ["123456789"] ["1234567890"]* | "0"
+ID -> ["qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM"] ["qwertyuiopasdfghjklzxcvbnmQWERTYUIOPASDFGHJKLZXCVBNM1234567890"]*
+EXPRLIST -> EXPR ("," EXPR)*
+STATEMENT -> IDLIST "=" EXPRLIST ";"
+IFSTATEMENT -> "if" "(" BOOLEXPR ")" BLOCK ("else" BLOCK)?
+RETSTATEMENT -> "return" EXPRLIST ";"
+BOOLEXPR -> EXPR (">=" | "==" | ">") EXPR
+CALL -> (IDLIST "=")? ID "(" (EXPRLIST)? ")" ";"
