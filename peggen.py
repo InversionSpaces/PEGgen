@@ -523,20 +523,25 @@ class PEGGenerator:
 		
 		self.__fp.write("};")
 
-fin = open("test", "rb")
+import sys
 
-parser = GrammarParser(fin)
+if __name__ == "__main__":
+	if len(sys.argv) != 3:
+		print(f"Usage: {sys.argv[0]} GRAMMAR_FILE HEADER_FILE")
+		print("Takes BNF grammar in GRAMMAR_FILE")
+		print("And generates C++ parser in HEADER_FILE")
+		
+		exit(0)
+	
+	with open(sys.argv[1], "rb") as fin:
+		parser = GrammarParser(fin)
+		grammar = parser.parseGrammar()
 
-fout = open("test.cpp", "w")
+	print("Parsed grammar:")
+	print(grammar)
 
-grammar = parser.parseGrammar()
-
-fin.close()
-
-generator = PEGGenerator(grammar, fout)
-
-generator.generate()
-
-fout.close()
+	with open(sys.argv[2], "w") as fout:
+		generator = PEGGenerator(grammar, fout)
+		generator.generate()
 
 
