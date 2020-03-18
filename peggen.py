@@ -500,6 +500,12 @@ class PEGGenerator:
 	def generate(self):
 		self.__fp.write(self.class_header)
 		
+		self.__fp.write(f'''
+			optional<Node*> parse() {{
+				return parse{self.__grammar[0].name}();
+			}}
+		''')
+		
 		for rule in self.__grammar:
 			self.__fp.write(f'''
 				optional<Node*> parse{rule.name}() {{

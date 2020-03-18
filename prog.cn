@@ -1,0 +1,71 @@
+def main()  {
+	two();
+}
+
+def one() : a, b, c, n, x1, x2 {
+	a = input();
+	b = input();
+	c = input();
+	
+	n, x1, x2 = squareSolver(a, b, c);
+	
+	output(n);
+	output(x1);
+	output(x2);
+}
+
+def two() : n {
+	n = input();
+	n = fact(n);
+	output(n);
+}
+
+def linearSolver(a, b) : n, x {
+	if (a == 0) {
+		if (b == 0) {
+			n = -1;
+			x = 0;
+		}
+		else {
+			n = 0;
+			x = 0;
+		}
+	}
+	else {
+		n = 1;
+		x = -b / a;
+	}
+
+	return n, x;
+}
+
+def fact(n) : tmp {
+	if (n == 0) {
+		return 1;
+	}
+
+	tmp = fact(n - 1);
+
+	return n * tmp;
+}
+
+def squareSolver(a, b, c) : n, x1, x2, d2, d {
+	if (a == 0) {
+		n, x1 = linearSolver(b, c);
+		return n, x1, 0;
+	}
+
+	d2 = b * b - 4 * a * c;
+
+	if (0 > d2) {
+		return 0, 0, 0;
+	}
+	
+	if (d2 == 0) {
+		return 1, -b / (2 * a), 0;
+	}
+
+	d = sqrt(d2);
+
+	return 2, (- b + d) / (2 * a), (- b - d) / (2 * a);	
+}
