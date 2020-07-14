@@ -20,5 +20,5 @@ if __name__ == "__main__":
     if args.verbose:
         pprint(grammar)
 
-    generator = PEGGenerator(grammar, args.header)
+    generator = PEGGenerator(args.name, grammar, args.header)
     generator.generate()

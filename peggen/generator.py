@@ -4,7 +4,8 @@ from peggen.parser import Token, Wildcard, Charset
 import peggen.helpers as helpers
 
 class PEGGenerator:
-    def __init__(self, grammar, fp):
+    def __init__(self, name, grammar, fp):
+        self.__name = name
         self.__grammar = grammar
         self.__fp = fp
         self.depth = 0
@@ -129,7 +130,8 @@ class PEGGenerator:
         self.depth -= 1
 
     def generate(self):
-        self.__fp.write(helpers.CLASS_HEADER)
+        header = helpers.CLASS_HEADER.format(self.__name)
+        self.__fp.write(header)
 
         name = self.__grammar[0].name
         parse = helpers.PARSE_METHOD.format(name)

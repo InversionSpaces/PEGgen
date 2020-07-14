@@ -24,8 +24,8 @@ TMP_PUSH_BACK = '''
 
 __ESCAPE = '''
 if (!{}) {{
-        purge_tree(*top());
-        top() = nullopt;
+        peg::AbstractTree::purge(*top());
+        top() = std::nullopt;
 
         reset();
         break;
@@ -37,7 +37,7 @@ CTMP_ESCAPE = __ESCAPE.format("ctmp")
 
 CREATE_CHILD = '''
 (*top())->childs.push_back(
-        new Node {string(1, *ctmp)}
+        new Node {std::string(1, *ctmp)}
 );
 '''
 
@@ -86,8 +86,10 @@ else break;
 '''
 
 PARSE_METHOD = '''
-optional<Node*> parse() {{
-        return parse{}();
+AbstractTree parse() {{
+        auto res = parse{}();
+        if (res) return AbstractTree(*res);
+        return AbstractTree(nullptr);
 }}
 '''
 
@@ -117,7 +119,7 @@ ALT_FOOTER = '''
 
 ALTS_HEADER = '''
 // ALTS {}
-push(nullopt);
+push(std::nullopt);
 '''
 
 ALTS_FOOTER = '''
@@ -126,11 +128,11 @@ assert(results.size() == init_size + {});
 '''
 
 RULE_HEADER = '''
-optional<Node*> parse{}() {{
+std::optional<Node*> parse{}() {{
         const size_t init_size = results.size();
 
-        optional<Node*> tmp = nullopt;
-        optional<char> ctmp = nullopt;
+        std::optional<Node*> tmp = std::nullopt;
+        std::optional<char> ctmp = std::nullopt;
 '''
 
 RULE_FOOTER = '''
@@ -152,93 +154,95 @@ CLASS_HEADER = '''
 #include <cassert>
 #include <cstdlib>
 
-#include "Node.hpp"
+#include "AbstractTree.hpp"
 
-using namespace std;
+namespace peg {{
+class {}
+{{
+using Node = AbstractTree::Node;
 
-class Parser
-{
 private:
         const char* input;
-        stack<const char*> marks;
-        stack<optional<Node*> > results;
+        std::stack<const char*> marks;
+        std::stack<std::optional<Node*>> results;
 public:
         Parser(const char* input) : input(input)
-        {
-        }
+        {{
+        }}
 
         inline void skip()
-        {
+        {{
                 while (*input && isspace(*input)) input++;
-        }
+        }}
 
-        inline optional<char> symbol(const char* c)
-        {
+        inline std::optional<char> symbol(const char* c)
+        {{
                 skip();
-                if (*input && strchr(c, *input) != NULL) {
+                if (*input && strchr(c, *input) != NULL) {{
                         char retval = *input;
                         input++;
                         return retval;
-                }
-                return nullopt;
-        }
+                }}
+                return std::nullopt;
+        }}
 
         inline void mark()
-        {
+        {{
                 marks.push(input);
-        }
+        }}
 
         inline void unmark()
-        {
+        {{
                 marks.pop();
-        }
+        }}
 
         inline void reset()
-        {
+        {{
                 input = marks.top();
                 marks.pop();
-        }
+        }}
 
-        inline optional<Node*> pop()
-        {
+        inline std::optional<Node*> pop()
+        {{
                 auto retval = results.top();
                 results.pop();
                 return retval;
-        }
+        }}
 
-        inline void push(optional<Node*> res)
-        {
+        inline void push(std::optional<Node*> res)
+        {{
                 results.push(res);
-        }
+        }}
 
         inline void drop()
-        {
-                optional<Node*> temp = results.top();
+        {{
+                std::optional<Node*> temp = results.top();
                 results.pop();
                 results.top() = temp;
-        }
+        }}
 
-        inline optional<Node*>& top()
-        {
+        inline std::optional<Node*>& top()
+        {{
                 return results.top();
-        }
+        }}
 
         const char* pos()
-        {
+        {{
                 return input;
-        }
+        }}
 
-        optional<Node*> expect(const char* s, int n)
-        {
+        inline std::optional<Node*> expect(const char* s, int n)
+        {{
                 skip();
-                if (strncmp(input, s, n) == 0) {
+                if (strncmp(input, s, n) == 0) {{
                         input += n;
-                        return new Node {s};
-                }
-                return nullopt;
-        }
+                        return new Node {{s}};
+                }}
+                return std::nullopt;
+        }}
 '''
 
 CLASS_FOOTER = '''
 };
+}
 '''
