@@ -23,7 +23,7 @@ inline void purge_tree(const Node* root)
 	delete root;
 }
 
-inline void dump_inner(const Node* root, ofstream& out)
+inline void dump_inner(const Node* root, ostream& out)
 {
 	out << "NODE" << root 
 		<< "[shape=box label=\"" << root->data
@@ -37,7 +37,7 @@ inline void dump_inner(const Node* root, ofstream& out)
 	}
 }
 
-inline void dump_tree(const Node* root, ofstream& out)
+inline void dump_tree(const Node* root, ostream& out)
 {
 	out << "digraph Tree {\n";
 	dump_inner(root, out);

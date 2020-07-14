@@ -5,7 +5,8 @@ FMT = clang-format
 DOT = dot
 
 all:
-	$(PY) peggen.py lang_grammar genParser.hpp
-	$(FMT) genParser.hpp > Parser.hpp
-	rm genParser.hpp
-	$(CC) $(FLAGS) main.cpp -o test
+	$(PY) peggen.py lang_grammar header.hpp
+	$(CC) $(FLAGS) test.cpp -o test
+	./test < prog.cn > prog.dot
+	$(DOT) -Tpng prog.dot > prog.png
+	diff prog.png etalon.png
