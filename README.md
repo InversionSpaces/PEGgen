@@ -1,6 +1,6 @@
 # PEGgen - C++ recursuve descent parser generator from context free formal grammar in BNF
 ## Usage
-```bash
+```
 $ python3 -m peggen -h
 usage: peggen [-h] [-n NAME] [-v] grammar header
 
@@ -17,7 +17,7 @@ optional arguments:
 ```
 
 ## Example
-```bash
+```
 $ cat lang_grammar 
 PROGRAM -> (FUNCTION)+
 FUNCTION -> "def" ID "(" (IDLIST)? ")" (":" IDLIST)? BLOCK
@@ -36,7 +36,7 @@ BOOLEXPR -> EXPR (">=" | "==" | ">") EXPR
 CALL -> (IDLIST "=")? ID "(" (EXPRLIST)? ")" ";"
 ```
 
-```bash
+```
 $ cat prog.cn 
 def main()  {
 	linearSolver(5 + 4, 10 * 8);
@@ -62,7 +62,7 @@ def linearSolver(a, b) : n, x {
 }
 
 ```
-```bash
+```
 $ make
 python3 -m peggen lang_grammar header.hpp
 g++ -fsanitize=address --std=c++17 test.cpp -o test
